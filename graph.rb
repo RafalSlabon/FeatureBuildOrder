@@ -1,5 +1,53 @@
 require 'set'
 
+class Edges
+    def initialize
+        @incoming = Set.new
+        @outgoing = Set.new
+    end
+    
+    def incoming
+        @incoming
+    end
+    
+    def outgoing
+        @outgoing
+    end
+    
+    def add_incoming(node)
+        @incoming << node
+    end
+    
+    def remove_incoming(node)
+        @incoming.delete(node)
+    end
+    
+    def has_any_incoming?
+        !@incoming.empty?
+    end
+    
+    def has_incoming?(node)
+         @incoming.include?(node)
+    end
+    
+    def has_outgoing?(node)
+         @outgoing.include?(node)
+    end
+    
+    def add_outgoing(node)
+        @outgoing << node
+    end
+    
+    def remove_outgoing(node)
+        @outgoing.delete(node)
+    end
+    
+    def to_s
+        "Edges incoming:#{@incoming} outgoing:#{@outgoing}"
+    end
+
+end
+
 class Graph
 
     def initialize
@@ -7,37 +55,49 @@ class Graph
     end
     
     def add_vertex(vertex)
-        @nodes[vertex] = Array.new
+        @nodes[vertex] = Edges.new
     end
     
     def add_edge(src, dst)
-        childOfSrc = @nodes[src]
-        unless(childOfSrc)
-            childOfSrc = Array.new
-        end
-        childOfSrc << dst
-        @nodes[src] = childOfSrc
+        src_edges = @nodes[src]
+        src_edges.add_outgoing(dst)
+        @nodes[src] = src_edges
+        
+        dst_edges = @nodes[dst]
+        dst_edges.add_incoming(src)
+        @nodes[dst] = dst_edges
     end
     
     def remove_edge(src, dst)
-        childOfSrc = @nodes[src]
-        if(childOfSrc)
-            childOfSrc.delete(dst)
+        src_edges = @nodes[src]
+        dst_edges = @nodes[dst]
+        if(!src_edges.has_outgoing?(dst) || !dst_edges.has_incoming?(src))
+            raise "there is no edge from '#{src}' to '#{dst}'!"
         end
+        
+        src_edges.remove_outgoing(dst)           
+        dst_edges.remove_incoming(src)
     end
     
     def nodes
         @nodes
     end
     
-    def src_nodes_for(dst)
-        srcNodes = Array.new
-        @nodes.each do |srcNode, dstNodes|
-            if(dstNodes.include?(dst))
-                srcNodes << srcNode
+    def has_edges?
+        @nodes.each_value do |edges|
+            if(!edges.incoming.empty? || !edges.outgoing.empty?)
+                return true
             end
         end
-        srcNodes
+        return false 
+    end
+    
+    def incoming_nodes_of(node)
+        @nodes[node].incoming
+    end
+    
+    def outgoing_nodes_of(node)
+        @nodes[node].outgoing
     end
     
     def to_s
@@ -46,31 +106,30 @@ class Graph
     
 end
 
-
 class TopologicalSort
 
     def initialize(graph)
         @graph = graph
     end
     
+    #http://en.wikipedia.org/wiki/Topological_sorting
     def sort
         sortedNodes = Array.new
         s = nodes_with_no_incoming_edges
-        s.each do |node|
-            s.delete(node)
-            sortedNodes << node
-            childNodes = @graph.src_nodes_for(node)
-            childNodes.each do |childNode|
-                @graph.remove_edge(node, childNode)
-                childIncomingNodes = @graph.nodes[childNode]
-                if(childIncomingNodes == nil || childIncomingNodes.empty?)
-                    s << childNode
+        s.each do |n|
+            sortedNodes << n
+            outgoingNodesOfN = @graph.outgoing_nodes_of(n)
+            outgoingNodesOfN.each do |m|
+                @graph.remove_edge(n, m)
+                incomingNodesOfM = @graph.incoming_nodes_of(m)
+                if(incomingNodesOfM.empty?)
+                    s << m
                 end
             end
         end
         
-        unless(@graph.nodes)
-            throw "graph has at least one cycle"
+        if(@graph.has_edges?)
+            raise "graph has at least one cycle"
         end
         sortedNodes
     end
@@ -78,41 +137,12 @@ class TopologicalSort
     def nodes_with_no_incoming_edges
         nodesWithNoIncomingEdges = Set.new
         
-        @graph.nodes.each do |node, childNodes|
-            if(!childNodes || childNodes.empty?)
+        @graph.nodes.each do |node, edges|
+            unless(edges.has_any_incoming?)
                 nodesWithNoIncomingEdges << node
             end
         end
-        nodesWithNoIncomingEdges 
+        nodesWithNoIncomingEdges.to_a 
     end
 
 end
-
-g = Graph.new
-g.add_vertex("a")
-g.add_vertex("b")
-g.add_vertex("c")
-g.add_vertex("d")
-
-g.add_edge("a", "b")
-g.add_edge("a", "c")
-
-g.add_edge("b", "d")
-
-#puts g
-
-topSort = TopologicalSort.new(g)
-puts topSort.sort
-
-s = Set.new
-
-s << "a"
-i = 10
-s.each do |x|
-    if(i > 0)
-        s << i.to_s
-        i -= 1
-    end
-    puts s    
-end
-
